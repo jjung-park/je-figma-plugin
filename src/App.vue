@@ -65,8 +65,8 @@
           <table>
             <thead>
             <tr>
-              <th width="40%">한글 (Value)</th>
-              <th width="60%">영어 (Key / camelCase)</th>
+              <th style="width:40%">한글 (Value)</th>
+              <th style="width:60%">영어 (Key / camelCase)</th>
             </tr>
             </thead>
             <tbody>
@@ -89,7 +89,7 @@
         </button>
         <div v-if="autoBoundCount > 0" class="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-lg flex items-center gap-3 animate-in fade-in slide-in-from-top-2 mt-4">
           <div class="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-style="width:3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
           </div>
           <div>
             <p class="text-[11px] font-bold text-blue-800 uppercase tracking-tight">Smart Linking Complete</p>
