@@ -53,73 +53,83 @@ figma.ui.onmessage = async (msg) => {
     }
     if (msg.type === 'register-variables') {
         const { data, collectionId, newCollectionName } = msg;
-        let col = figma.variables.getLocalVariableCollections().find(c => c.id === collectionId);
 
+        let col = figma.variables.getLocalVariableCollections().find(c => c.id === collectionId);
         if (!col) {
-            const existing = figma.variables.getLocalVariableCollections().find(c => c.name === newCollectionName);
-            col = existing || figma.variables.createVariableCollection(newCollectionName || "Translations");
+            col = figma.variables.getLocalVariableCollections().find(c => c.name === newCollectionName) ||
+                figma.variables.createVariableCollection(newCollectionName || "Translations");
         }
 
-        // 모드 설정
         if (col.modes.length < 2) {
-            col.renameMode(col.modes[0].modeId, "title");
+            if (col.modes[0].name !== "title") col.renameMode(col.modes[0].modeId, "title");
             col.addMode("contents");
         }
 
         const modeTitleId = col.modes[0].modeId;
         const modeContentsId = col.modes[1].modeId;
+        const colId = col.id;
 
-        // 💡 기존 변수 맵 생성 (중복 체크용)
-        const localVars = figma.variables.getLocalVariables("STRING").filter(v => v.variableCollectionId === col.id);
-        const valueToVarIdMap = new Map();
-        localVars.forEach(v => {
-            const val = v.valuesByMode[modeTitleId];
-            if (typeof val === 'string') valueToVarIdMap.set(val.trim(), v.id);
-        });
-
-        let duplicateVarCount = 0; // 💡 중복 변수 개수 카운트
-        let boundLayerCount = 0;   // (참고용) 연결된 레이어 수
+        let boundCount = 0;
 
         for (const item of data) {
             const varName = toCamelCase(item.english);
-            const trimmedHeader = item.header.trim();
-            let targetVar;
 
-            // 💡 중복 체크: 이미 콜렉션에 같은 값이 있는지 확인
-            if (valueToVarIdMap.has(trimmedHeader)) {
-                const varId = valueToVarIdMap.get(trimmedHeader);
-                targetVar = figma.variables.getVariableById(varId);
-                duplicateVarCount++; // 💡 중복된 변수를 찾았으므로 카운트 증가
-            } else {
-                // 새로 생성
-                targetVar = localVars.find(v => v.name === varName) || figma.variables.createVariable(varName, col.id, "STRING");
-                targetVar.setValueForMode(modeTitleId, trimmedHeader);
-                targetVar.setValueForMode(modeContentsId, item.body);
-                // 새로 만든 변수는 맵에 추가 (이번 루프 내 중복 방지)
-                valueToVarIdMap.set(trimmedHeader, targetVar.id);
+            let targetVar = figma.variables.getLocalVariables("STRING")
+                .find(v => v.name === varName && v.variableCollectionId === colId);
+
+            if (!targetVar) {
+                targetVar = figma.variables.createVariable(varName, colId, "STRING");
             }
 
-            // 레이어 바인딩 (선택 영역 내 탐색)
+            targetVar.setValueForMode(modeTitleId, item.header.toString().trim());
+            targetVar.setValueForMode(modeContentsId, item.body.toString().trim());
+
             const selection = figma.currentPage.selection;
             selection.forEach(root => {
-                const allNodes = root.findAll ? root.findAll(n => n.name.toLowerCase() === "cell-header" || n.name.toLowerCase() === "cell-body") : [];
-                allNodes.forEach(node => {
+                const targets = [];
+                if (root.name.toLowerCase().includes("cell-header") || root.name.toLowerCase().includes("cell-body")) {
+                    targets.push(root);
+                }
+                if ("findAll" in root) {
+                    targets.push(...root.findAll(n =>
+                        n.name.toLowerCase().includes("cell-header") ||
+                        n.name.toLowerCase().includes("cell-body")
+                    ));
+                }
+
+                targets.forEach(node => {
                     const tNode = node.type === "TEXT" ? node : (node.findAll ? node.findAll(n => n.type === "TEXT")[0] : null);
                     if (!tNode) return;
 
-                    if (node.name.toLowerCase() === "cell-header" && tNode.characters.trim() === item.header) {
-                        tNode.setBoundVariable('characters', targetVar.id);
-                        boundLayerCount++;
-                    } else if (node.name.toLowerCase() === "cell-body" && tNode.characters.trim() === item.body) {
-                        tNode.setBoundVariable('characters', targetVar.id);
-                        boundLayerCount++;
+                    const isHeader = node.name.toLowerCase().includes("cell-header");
+                    const isBody = node.name.toLowerCase().includes("cell-body");
+
+                    const isMatch = isHeader ?
+                        tNode.characters.trim() === item.header.trim() :
+                        tNode.characters.trim() === item.body.trim();
+
+                    if (isMatch) {
+                        try {
+                            const targetModeId = isHeader ? modeTitleId : modeContentsId;
+
+                            // ✅ 버그 수정: 올바른 피그마 API 메서드명 적용
+                            node.setExplicitVariableModeForCollection(colId, targetModeId);
+                            if (node.id !== tNode.id) {
+                                tNode.setExplicitVariableModeForCollection(colId, targetModeId);
+                            }
+
+                            // 모드가 정상적으로 적용된 후 변수 연결
+                            tNode.setBoundVariable('characters', targetVar.id);
+
+                            boundCount++;
+                        } catch (err) {
+                            console.error("적용 실패:", err);
+                        }
                     }
                 });
             });
         }
 
-        figma.notify(`✅ 완료: 중복 변수 ${duplicateVarCount}개 재사용 / ${boundLayerCount}개 레이어 연결`);
-        // 💡 UI로 '중복 변수 개수'를 보냄
-        figma.ui.postMessage({ type: 'variables-registered', successCount: duplicateVarCount });
+        figma.notify(`✅ ${boundCount}개 레이어 동기화 완료 (모드 적용됨)`);
     }
 };

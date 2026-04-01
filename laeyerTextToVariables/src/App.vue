@@ -12,7 +12,7 @@
 
       <div class="config-box mb-4">
         <div class="flex justify-between items-center mb-2">
-          <label class="label mb-0">대상 콜렉션</label>
+          <label class="text-xs w-20 mb-0">대상 콜렉션</label>
           <button @click="refreshCollections" class="btn-refresh">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
             목록 갱신
@@ -177,7 +177,7 @@ onMounted(() => {
 <style scoped>
 .btn-refresh {
   background: none; border: none; color: #18A0FB; font-size: 10px; font-weight: bold;
-  display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 2px 4px;
+  display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 2px 4px; width:auto
 }
 .btn-refresh:hover { color: #0d8de3; }
 .cell-text { font-size: 11px; color: #666; max-width: 100px; overflow: hidden; text-overflow: ellipsis; }
