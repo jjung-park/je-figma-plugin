@@ -1,88 +1,127 @@
-figma.showUI(__html__, { width: 350, height: 500 });
+figma.showUI(__html__, { width: 350, height: 520 });
 
-// 1. UI에 필요한 초기 데이터(선택된 컴포넌트, 변수 콜렉션 목록) 전달
 async function sendInitData() {
-    const selection = figma.currentPage.selection[0];
-    let compData = null;
+    try {
+        const selection = figma.currentPage.selection[0];
+        let compData = null;
 
-    // 💡 COMPONENT, INSTANCE 외에 FRAME, GROUP도 허용
-    const allowedTypes = ['COMPONENT', 'INSTANCE', 'FRAME', 'GROUP'];
+        if (selection) {
+            let targets = [];
+            // 1. 선택물 자체가 인스턴스/컴포넌트인 경우
+            if (selection.type === 'INSTANCE' || selection.type === 'COMPONENT') {
+                targets = [selection];
+            }
+            // 2. 프레임/그룹 내부의 모든 인스턴스 탐색
+            else if ('findAll' in selection) {
+                targets = selection.findAll(n => n.type === 'INSTANCE' || n.type === 'COMPONENT');
+            }
 
-    if (selection && allowedTypes.includes(selection.type)) {
-        // 모든 텍스트 레이어 추출
-        const textNodes = selection.findAll(n => n.type === 'TEXT');
-        const textNames = [...new Set(textNodes.map(n => n.name))];
-        compData = {
-            id: selection.id,
-            name: selection.name,
-            textLayers: textNames,
-            type: selection.type
-        };
+            const allTextProps = new Set();
+            targets.forEach(t => {
+                const props = t.type === 'INSTANCE' ? t.componentProperties : t.componentPropertyDefinitions;
+                if (props) {
+                    Object.keys(props).forEach(name => {
+                        if (props[name].type === 'TEXT') allTextProps.add(name);
+                    });
+                }
+            });
+
+            compData = {
+                name: selection.name,
+                properties: Array.from(allTextProps) // 중복 제거된 프로퍼티 리스트
+            };
+        }
+
+        const localCollections = await figma.variables.getLocalVariableCollectionsAsync();
+        const colData = localCollections.map(c => ({
+            id: c.id,
+            name: c.name,
+            variableCount: c.variableIds.length,
+            modes: c.modes.map(m => ({ modeId: m.modeId, name: m.name }))
+        }));
+
+        figma.ui.postMessage({
+            type: 'init-data',
+            component: compData,
+            collections: colData
+        });
+    } catch (err) {
+        console.error("데이터 전송 중 에러:", err);
     }
-
-    const localCollections = await figma.variables.getLocalVariableCollectionsAsync();
-    const colData = localCollections.map(c => ({
-        id: c.id,
-        name: c.name,
-        variableCount: c.variableIds.length,
-        modes: c.modes.map(m => ({ modeId: m.modeId, name: m.name }))
-    }));
-
-    figma.ui.postMessage({
-        type: 'init-data',
-        component: compData,
-        collections: colData
-    });
 }
 
-// 캔버스 선택이 바뀔 때마다 데이터 갱신
+// 이벤트 리스너 설정
 figma.on("selectionchange", sendInitData);
-// 플러그인 켰을 때 즉시 한 번 실행
-sendInitData();
+// 실행 시 즉시 데이터 전송 (UI가 로드될 시간을 위해 약간의 지연을 주기도 함)
+setTimeout(sendInitData, 100);
 
-
-// 2. UI로부터 '생성' 명령을 받았을 때의 처리
 figma.ui.onmessage = async (msg) => {
     if (msg.type === 'generate') {
         const { collectionId, mappings } = msg.data;
         const selection = figma.currentPage.selection[0];
 
-        if (!selection) return figma.notify("컴포넌트를 다시 선택해주세요.");
+        if (!selection) return figma.notify("대상을 선택해주세요.");
 
+        // 1. 변수 콜렉션 가져오기
         const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
-        const variableIds = collection.variableIds;
+        if (!collection) return figma.notify("콜렉션을 찾을 수 없습니다.");
 
+        const variableIds = collection.variableIds;
         const generatedNodes = [];
         let currentY = selection.y + selection.height + 20;
 
-        // 💡 루프 시작
-        for (let i = 0; i < variableIds.length; i++) {
-            const variable = await figma.variables.getVariableByIdAsync(variableIds[i]);
+        // 변수 개수만큼 반복 생성 (행 단위)
+        for (const varId of variableIds) {
+            const variable = await figma.variables.getVariableByIdAsync(varId);
+            if (!variable) continue;
 
-            // 1. 복제본 생성
-            const clone = selection.type === 'COMPONENT' ? selection.createInstance() : selection.clone();
+            const clone = selection.clone();
             clone.y = currentY;
             clone.x = selection.x;
             currentY += clone.height + 16;
 
-            // 2. ⚠️ 중요: 복제된 'clone' 내부에서 텍스트 노드를 매번 새로 검색합니다.
-            const textNodesInClone = clone.findAll(n => n.type === "TEXT");
+            // 2. 내부의 모든 인스턴스 탐색
+            const allInstances = (clone.type === 'INSTANCE')
+                ? [clone, ...(clone.findAll(n => n.type === 'INSTANCE'))]
+                : clone.findAll(n => n.type === 'INSTANCE');
 
-            for (const mapping of mappings) {
-                // 이름이 일치하는 타겟 레이어 찾기
-                const targetNodes = textNodesInClone.filter(n => n.name === mapping.layerName);
+            for (const inst of allInstances) {
+                if (!inst.componentProperties) continue;
 
-                for (const node of targetNodes) {
+                const propertyUpdates = {};
+                let targetModeId = null;
+
+                // 3. 매핑 정보를 바탕으로 어떤 인스턴스에 어떤 모드를 넣을지 결정
+                for (const mapping of mappings) {
+                    const targetPropName = Object.keys(inst.componentProperties).find(name =>
+                        name === mapping.propertyName || name.startsWith(`${mapping.propertyName}#`)
+                    );
+
+                    if (targetPropName) {
+                        // 변수 바인딩 (육각형 아이콘)
+                        propertyUpdates[targetPropName] = {
+                            type: "VARIABLE_ALIAS",
+                            id: variable.id
+                        };
+                        // 이 인스턴스가 보여줘야 할 모드 ID 저장
+                        targetModeId = mapping.modeId;
+                    }
+                }
+
+                // 4. 바인딩 및 모드 설정 실행
+                if (Object.keys(propertyUpdates).length > 0) {
                     try {
-                        // 3. 폰트 로드 (에러 방지를 위해 node 자체의 fontName을 직접 참조)
-                        await figma.loadFontAsync(node.fontName);
+                        // 변수 연결 실행
+                        inst.setProperties(propertyUpdates);
 
-                        const value = variable.valuesByMode[mapping.modeId];
-                        if (value !== undefined) {
-                            node.characters = String(value);
+                        // 💡 [핵심 수정] 정식 메서드 setExplicitVariableModeForCollection 사용
+                        if (targetModeId) {
+                            // figma.variables.getVariableCollectionByIdAsync를 통해 가져온 collection 객체 혹은 ID 사용
+                            inst.setExplicitVariableModeForCollection(collection, targetModeId);
+                            console.log(`✅ ${inst.name}에 모드 적용 성공 (ID: ${targetModeId})`);
                         }
-                    } catch (err) {
-                        console.error("폰트 로드 또는 텍스트 변경 중 에러:", err);
+                    } catch (e) {
+                        console.error(`❌ 모드 설정 에러:`, e);
                     }
                 }
             }
@@ -93,6 +132,6 @@ figma.ui.onmessage = async (msg) => {
 
         figma.currentPage.selection = generatedNodes;
         figma.viewport.scrollAndZoomIntoView(generatedNodes);
-        figma.notify(`✅ ${variableIds.length}개 생성 완료!`);
+        figma.notify("정식 API로 모드 바인딩 완료!");
     }
 };

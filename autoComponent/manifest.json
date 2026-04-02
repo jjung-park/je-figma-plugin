@@ -1,8 +1,12 @@
 {
-  "name": "autoComponent",
-  "id": "",
+  "name": "컴^포^넌%트#생$성",
+  "id": "1621454042456886826",
   "api": "1.0.0",
   "main": "code.js",
   "ui": "dist/index.html",
-  "editorType": ["figma"]
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["none"]
+  },
+  "documentAccess": "dynamic-page"
 }
