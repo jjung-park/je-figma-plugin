@@ -47,62 +47,52 @@ figma.ui.onmessage = async (msg) => {
         const { collectionId, mappings } = msg.data;
         const selection = figma.currentPage.selection[0];
 
-        if (!selection) return figma.notify("대상을 선택해주세요.");
+        if (!selection) return figma.notify("컴포넌트를 다시 선택해주세요.");
 
         const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
         const variableIds = collection.variableIds;
+
         const generatedNodes = [];
-        let currentY = selection.x + selection.height + 20;
+        let currentY = selection.y + selection.height + 20;
 
-        // 💡 변수 개수만큼 반복 생성
+        // 💡 루프 시작
         for (let i = 0; i < variableIds.length; i++) {
-            const variableId = variableIds[i];
-            const variable = await figma.variables.getVariableByIdAsync(variableId);
+            const variable = await figma.variables.getVariableByIdAsync(variableIds[i]);
 
-            // 1. 노드 복제
-            let newNode = selection.type === 'COMPONENT' ? selection.createInstance() : selection.clone();
-            newNode.y = currentY;
-            newNode.x = selection.x;
-            currentY += newNode.height + 16;
+            // 1. 복제본 생성
+            const clone = selection.type === 'COMPONENT' ? selection.createInstance() : selection.clone();
+            clone.y = currentY;
+            clone.x = selection.x;
+            currentY += clone.height + 16;
 
-            // 2. 🌟 핵심: 이 노드가 사용할 '모드'를 명시적으로 설정
-            // UI에서 선택한 모드(mapping.modeId)를 이 노드 전체에 적용합니다.
-            // (각 복제본마다 다른 모드를 적용해야 하므로 루프 안에서 처리)
+            // 2. ⚠️ 중요: 복제된 'clone' 내부에서 텍스트 노드를 매번 새로 검색합니다.
+            const textNodesInClone = clone.findAll(n => n.type === "TEXT");
+
             for (const mapping of mappings) {
-                try {
-                    // 해당 콜렉션에 대해 특정 모드를 강제로 할당합니다.
-                    newNode.setExplicitVariableMode(collectionId, mapping.modeId);
-                } catch (e) {
-                    console.error("모드 설정 실패:", e);
-                }
-            }
-
-            // 3. 내부 텍스트 레이어에 변수 바인딩
-            const allTextNodes = newNode.findAll(n => n.type === "TEXT");
-            for (const mapping of mappings) {
-                const targetNodes = allTextNodes.filter(n => n.name === mapping.layerName);
+                // 이름이 일치하는 타겟 레이어 찾기
+                const targetNodes = textNodesInClone.filter(n => n.name === mapping.layerName);
 
                 for (const node of targetNodes) {
                     try {
-                        // 폰트 로드는 바인딩 시에도 안전을 위해 필요할 수 있습니다.
+                        // 3. 폰트 로드 (에러 방지를 위해 node 자체의 fontName을 직접 참조)
                         await figma.loadFontAsync(node.fontName);
 
-                        // 🌟 텍스트 값 자체를 바꾸는 게 아니라 '변수'를 연결합니다.
-                        // 이제 이 레이어는 자동으로 부모(newNode)에 설정된 모드 값을 보여줍니다.
-                        node.setBoundVariable('characters', variable.id);
-
+                        const value = variable.valuesByMode[mapping.modeId];
+                        if (value !== undefined) {
+                            node.characters = String(value);
+                        }
                     } catch (err) {
-                        console.error("바인딩 에러:", err);
+                        console.error("폰트 로드 또는 텍스트 변경 중 에러:", err);
                     }
                 }
             }
 
-            figma.currentPage.appendChild(newNode);
-            generatedNodes.push(newNode);
+            figma.currentPage.appendChild(clone);
+            generatedNodes.push(clone);
         }
 
         figma.currentPage.selection = generatedNodes;
         figma.viewport.scrollAndZoomIntoView(generatedNodes);
-        figma.notify(`✅ ${variableIds.length}개 변수 연결 및 생성 완료!`);
+        figma.notify(`✅ ${variableIds.length}개 생성 완료!`);
     }
 };
