@@ -1,8 +1,12 @@
 {
-  "name": "LayerTextToVariables",
-  "id": "",
+  "name": "텍스T추^^출",
+  "id": "1621455251912129077",
   "api": "1.0.0",
   "main": "code.js",
   "ui": "dist/index.html",
-  "editorType": ["figma"]
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["none"]
+  },
+  "documentAccess": "dynamic-page"
 }
