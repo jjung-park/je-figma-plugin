@@ -3,8 +3,12 @@
     <h2 class="font-bold text-lg">테이블 컴포넌트 자동 생성기</h2>
 
     <div class="p-3 bg-gray-100 rounded border">
-      <p v-if="component" class="text-blue-600 font-bold">선택됨: {{ component.name }}</p>
-      <p v-else class="text-red-500">피그마 캔버스에서 컴포넌트나 인스턴스를 선택해주세요.</p>
+      <p v-if="component" class="text-blue-600 font-bold">
+        선택됨: {{ component.name }} ({{ component.type }})
+      </p>
+      <p v-else class="text-red-500">
+        작업할 프레임, 그룹 또는 컴포넌트를 선택해주세요.
+      </p>
     </div>
 
     <div v-if="collections.length > 0" class="space-y-1">
