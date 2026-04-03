@@ -1,60 +1,55 @@
 <template>
   <div class="p-4">
-    <h2 class="title">Structure to Modes</h2>
+    <h2 class="title">Structure to Modes <span class="text-[10px] bg-blue-100 text-blue-600 px-1 rounded">V2</span></h2>
+
     <section class="step-section">
-      <button @click="requestExtract" class="btn-primary">구조 분석 및 추출 (cell-header/Body)</button>
+      <button @click="requestExtract" class="btn-primary">1. 구조 분석 및 추출</button>
     </section>
 
     <div v-if="extractedPairs.length > 0" class="mt-4">
       <button @click="translateTexts" :disabled="isTranslating" class="btn-next mb-4">
-        {{ isTranslating ? '번역 중...' : '자동 번역 (Key 생성)' }}
+        {{ isTranslating ? '번역 및 Key 생성 중...' : '자동 번역 (Key 생성)' }}
       </button>
 
       <div class="config-box mb-4">
-        <div class="flex justify-between items-center mb-2">
-          <label class="text-xs w-20 mb-0">대상 콜렉션</label>
-          <button @click="refreshCollections" class="btn-refresh">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-            목록 갱신
-          </button>
+        <div class="flex justify-between items-center mb-1">
+          <label class="text-xs font-bold block">대상 콜렉션</label>
+          <button @click="refreshCollections" class="refresh-btn">↻</button>
         </div>
-
-        <select v-model="selectedCollectionId" class="input-field">
+        <select v-model="selectedCollectionId" class="input-field" @change="updatePrefixList">
           <option value="new">+ 새 콜렉션 만들기</option>
-          <option v-for="col in collections" :key="col.id" :value="col.id">
-            {{ col.name }}
-          </option>
+          <option v-for="col in collections" :key="col.id" :value="col.id">{{ col.name }}</option>
         </select>
-        <input v-if="selectedCollectionId === 'new'" v-model="newCollectionName" class="input-field mt-2" placeholder="새 이름 (예: Content_Library)" />
+        <input v-if="selectedCollectionId === 'new'" v-model="newCollectionName" class="input-field mt-1" placeholder="새 콜렉션 이름" />
+
+        <label class="text-xs font-bold mt-3 mb-1 block">Prefix 입력(그룹 설정)</label>
+        <div class="flex gap-1">
+          <input v-model="newPrefix" class="input-field w-2/3" placeholder="예: Page_01" />
+        </div>
+        <p class="desc">중복 Header 발견 시 'common' 그룹으로 자동 이동됩니다.</p>
       </div>
 
       <div class="table-container">
         <table>
           <thead>
           <tr>
-            <th>Header (title)</th>
-            <th>Body (contents)</th>
+            <th>Header</th>
+            <th>Body</th>
             <th>English (Key)</th>
           </tr>
           </thead>
           <tbody>
-          <tr v-for="(pair, idx) in extractedPairs" :key="idx" >
-            <td class="cell-text" :title="pair.header">{{ pair.header }}</td>
-            <td class="cell-text" :title="pair.body">{{ pair.body }}</td>
-            <td><input v-model="translatedTexts[pair.header]" class="edit-input" placeholder="Key 명칭" /></td>
+          <tr v-for="pair in extractedPairs" :key="pair.header">
+            <td class="cell-text">{{ pair.header }}</td>
+            <td class="cell-text">{{ pair.body }}</td>
+            <td><input v-model="translatedTexts[pair.header]" class="edit-input" /></td>
           </tr>
           </tbody>
         </table>
       </div>
 
-      <button @click="registerWithModes" class="btn-variable mt-4">멀티 모드 변수 등록 및 연결</button>
-      <div v-if="autoBoundCount > 0" class="my-4 p-3 bg-green-50 border border-green-100 rounded-lg animate-in fade-in">
-        <p class="text-xs text-green-700">
-          ♻️ 콜렉션 내 <strong>{{ autoBoundCount }}개</strong>의 기존 변수를 찾아 재사용했습니다.
-        </p>
-      </div>
-
-      <button @click="resetAll" class="text-red-500 underline mt-4 text-[11px] block w-full text-center">전체 초기화</button>
+      <button @click="registerWithModes" class="btn-variable mt-4">2. 변수 등록 및 연결</button>
+      <button @click="resetAll" class="reset-link">전체 초기화</button>
     </div>
 
     <div v-else class="empty-state">
@@ -64,60 +59,38 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 
 const extractedPairs = ref([]);
 const translatedTexts = ref({});
 const collections = ref([]);
 const selectedCollectionId = ref('new');
 const newCollectionName = ref('Content_Library');
+
+// Prefix 관련 상태
+const prefixType = ref('select');
+const selectedPrefix = ref('');
+const newPrefix = ref('');
 const isTranslating = ref(false);
-const autoBoundCount = ref(0);
 
-// 💡 콜렉션 목록 요청 함수
-const refreshCollections = () => {
-  parent.postMessage({ pluginMessage: { type: 'get-collections' } }, '*');
+// 💡 현재 선택된 컬렉션에 포함된 Prefix 목록을 계산
+const currentPrefixes = computed(() => {
+  const col = collections.value.find(c => c.id === selectedCollectionId.value);
+  return col ? col.prefixes : [];
+});
+
+// 💡 [추가된 함수] 컬렉션 변경 시 Prefix 선택 상태 초기화
+const updatePrefixList = () => {
+  selectedPrefix.value = '';
+  newPrefix.value = '';
 };
 
-const resetAll = () => {
-  extractedPairs.value = [];
-  translatedTexts.value = {};
-  autoBoundCount.value = 0;
-  // 💡 초기화 시 목록 다시 불러오기
-  refreshCollections();
-};
-
-const requestExtract = () => {
-  autoBoundCount.value = 0;
-  parent.postMessage({ pluginMessage: { type: 'extract-text' } }, '*');
-};
-
-const translateTexts = async () => {
-  // 이미 번역 중이면 중단
-  if (isTranslating.value || extractedPairs.value.length === 0) return;
-
-  isTranslating.value = true;
-
-  for (const pair of extractedPairs.value) {
-    // 💡 이미 번역된 값이 있다면 다시 요청하지 않고 스킵 (선택 사항)
-    if (translatedTexts.value[pair.header] && translatedTexts.value[pair.header] !== '') {
-      continue;
-    }
-
-    try {
-      const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(pair.header)}&langpair=ko|en`);
-      const data = await res.json();
-      const translated = data.responseData.translatedText.replace(/\.$/, '').trim();
-      translatedTexts.value[pair.header] = translated;
-    } catch (e) {
-      console.error("번역 에러:", e);
-      translatedTexts.value[pair.header] = pair.header; // 실패 시 원문 유지
-    }
-  }
-  isTranslating.value = false;
-};
+// 콜렉션 목록 갱신 요청
+const refreshCollections = () => parent.postMessage({ pluginMessage: { type: 'get-collections' } }, '*');
+const requestExtract = () => parent.postMessage({ pluginMessage: { type: 'extract-text' } }, '*');
 
 const registerWithModes = () => {
+  const finalPrefix = prefixType.value === 'select' ? selectedPrefix.value : newPrefix.value;
   const payload = extractedPairs.value.map(p => ({
     header: p.header,
     body: p.body,
@@ -128,73 +101,70 @@ const registerWithModes = () => {
     pluginMessage: {
       type: 'register-variables',
       data: payload,
-      collectionId: selectedCollectionId.value,
-      newCollectionName: newCollectionName.value
+      collectionId: selectedCollectionId.value !== 'new' ? selectedCollectionId.value : null,
+      newCollectionName: newCollectionName.value,
+      prefix: finalPrefix
     }
   }, '*');
 };
 
-const handleMessage = (event) => {
-  const msg = event.data.pluginMessage;
-  if (!msg) return;
-
-  if (msg.type === 'text-extracted') {
-    // 1. 데이터 저장
-    extractedPairs.value = msg.pairs;
-
-    // 2. 번역 맵 초기화 (기존 데이터 유지하며 새 데이터 추가)
-    msg.pairs.forEach(p => {
-      if (!translatedTexts.value[p.header]) {
-        translatedTexts.value[p.header] = '';
-      }
-    });
-
-    // 💡 3. 데이터가 있으면 자동으로 번역 로직 실행
-    if (msg.pairs.length > 0) {
-      translateTexts();
-    }
-
-    // 추출 성공 시에도 콜렉션 목록 한 번 더 갱신
-    refreshCollections();
+const translateTexts = async () => {
+  if (isTranslating.value || extractedPairs.value.length === 0) return;
+  isTranslating.value = true;
+  for (const pair of extractedPairs.value) {
+    if (translatedTexts.value[pair.header]) continue;
+    try {
+      const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(pair.header)}&langpair=ko|en`);
+      const data = await res.json();
+      translatedTexts.value[pair.header] = data.responseData.translatedText.replace(/\.$/, '').trim();
+    } catch (e) { translatedTexts.value[pair.header] = pair.header; }
   }
-  else if (msg.type === 'collections-list') {
-    // 💡 피그마에서 받은 목록을 변수에 저장
-    collections.value = msg.data;
-  }
-  else if (msg.type === 'variables-registered') {
-    autoBoundCount.value = msg.successCount;
-    refreshCollections(); // 등록 후 목록 갱신 (새 콜렉션 생성 대응)
-  }
+  isTranslating.value = false;
+};
+
+const resetAll = () => {
+  extractedPairs.value = [];
+  translatedTexts.value = {};
+  selectedPrefix.value = '';
+  newPrefix.value = '';
+  refreshCollections();
 };
 
 onMounted(() => {
-  window.addEventListener('message', handleMessage);
-  // 💡 플러그인 실행 시 즉시 호출
+  window.onmessage = (event) => {
+    const msg = event.data.pluginMessage;
+    if (!msg) return;
+    if (msg.type === 'text-extracted') {
+      extractedPairs.value = msg.pairs;
+      msg.pairs.forEach(p => { if (!translatedTexts.value[p.header]) translatedTexts.value[p.header] = ''; });
+      translateTexts();
+    } else if (msg.type === 'collections-list') {
+      collections.value = msg.data;
+    }
+  };
   refreshCollections();
 });
 </script>
 
 <style scoped>
-.btn-refresh {
-  background: none; border: none; color: #18A0FB; font-size: 10px; font-weight: bold;
-  display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 2px 4px; width:auto
-}
-.btn-refresh:hover { color: #0d8de3; }
-.cell-text { font-size: 11px; color: #666; max-width: 100px; overflow: hidden; text-overflow: ellipsis; }
-.p-4 { padding: 20px; font-family: 'Inter', sans-serif; color: #333; }
-.title { font-size: 18px; font-weight: 800; margin-bottom: 20px; letter-spacing: -0.5px; }
-.step-section { margin-bottom: 24px; }
-button { width: 100%; border: none; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; padding: 12px; }
-.btn-primary { background: #18A0FB; color: white; }
-.btn-next { background: #1BC47D; color: white; }
+.p-4 { padding: 16px; font-family: 'Inter', sans-serif; color: #333; }
+.title { font-size: 16px; font-weight: 800; margin-bottom: 16px; letter-spacing: -0.5px; }
+.step-section { margin-bottom: 20px; }
+.btn-primary { background: #18A0FB; color: white; border: none; padding: 12px; border-radius: 6px; width: 100%; cursor: pointer; font-weight: 600; font-size: 13px; }
+.btn-next { background: #1BC47D; color: white; border: none; padding: 10px; border-radius: 6px; width: 100%; cursor: pointer; font-size: 12px; font-weight: 600; }
 .btn-next:disabled { background: #ccc; cursor: not-allowed; }
-.btn-variable { background: #9747FF; color: white; box-shadow: 0 4px 10px rgba(151, 71, 255, 0.2); }
-.config-box { background: #f5f5f5; padding: 12px; border-radius: 8px; }
-.input-field { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; box-sizing: border-box; background: #fff; color:#000; }
-.edit-input { width: 100%; padding: 6px; border: 1px solid #18A0FB; border-radius: 4px; font-size: 12px; outline: none; background: #fff; color:#000}
-.table-container { border: 1px solid #eee; border-radius: 6px; overflow: hidden; }
-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-th { background: #f9f9f9; padding: 8px; font-size: 11px; text-align: left; color: #777; border-bottom: 1px solid #eee; }
+.btn-variable { background: #9747FF; color: white; border: none; padding: 12px; border-radius: 6px; width: 100%; cursor: pointer; font-weight: 600; font-size: 13px; margin-top: 12px; }
+.config-box { background: #f8f8f8; padding: 12px; border-radius: 8px; border: 1px solid #eee; }
+.input-field { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 11px; box-sizing: border-box; background: #fff; color: #000; }
+.desc { font-size: 10px; color: #888; margin-top: 4px; line-height: 1.3; }
+.table-container { border: 1px solid #eee; border-radius: 4px; margin-top: 12px; max-height: 200px; overflow-y: auto; background: #fff; }
+table { width: 100%; border-collapse: collapse; font-size: 10px; }
+th { background: #f9f9f9; padding: 8px; font-weight: 700; color: #777; border-bottom: 1px solid #eee; position: sticky; top: 0; }
 td { padding: 8px; border-bottom: 1px solid #eee; vertical-align: middle; }
-.empty-state { text-align: center; color: #aaa; font-size: 12px; margin-top: 40px; border: 1px dashed #ccc; padding: 20px; border-radius: 10px; }
+.cell-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; color: #666; }
+.edit-input { width: 100%; border: 1px solid #18A0FB; border-radius: 4px; padding: 4px 6px; font-size: 11px; outline: none; }
+.reset-link { color: #f44; font-size: 10px; background: none; border: none; width: 100%; margin-top: 15px; cursor: pointer; text-decoration: underline; }
+.empty-state { text-align: center; color: #aaa; font-size: 12px; margin-top: 40px; border: 1px dashed #ccc; padding: 30px 20px; border-radius: 10px; }
+.refresh-btn { background: none; border: none; font-size: 18px; cursor: pointer; color: #888; }
+.refresh-btn:hover { color: #18a0fb; }
 </style>
