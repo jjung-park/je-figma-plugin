@@ -1,6 +1,6 @@
 <template>
   <div class="p-4">
-    <h2 class="title">Structure to Modes <span class="text-[10px] bg-blue-100 text-blue-600 px-1 rounded">V2</span></h2>
+    <h2 class="title text-amber-50">Structure to Modes <span class="text-[10px] bg-blue-100 text-blue-600 px-1 rounded">V2</span></h2>
 
     <section class="step-section">
       <button @click="requestExtract" class="btn-primary">1. 구조 분석 및 추출</button>
@@ -48,7 +48,7 @@
         </table>
       </div>
 
-      <button @click="registerWithModes" class="btn-variable mt-4">2. 변수 등록 및 연결</button>
+      <button @click="registerWithModes" class="btn-variable mt-4" >2. 변수 등록 및 연결</button>
       <button @click="resetAll" class="reset-link">전체 초기화</button>
     </div>
 
@@ -59,7 +59,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
+import {isEmpty} from "lodash/lang.js";
 
 const extractedPairs = ref([]);
 const translatedTexts = ref({});
@@ -72,12 +73,6 @@ const prefixType = ref('select');
 const selectedPrefix = ref('');
 const newPrefix = ref('');
 const isTranslating = ref(false);
-
-// 💡 현재 선택된 컬렉션에 포함된 Prefix 목록을 계산
-const currentPrefixes = computed(() => {
-  const col = collections.value.find(c => c.id === selectedCollectionId.value);
-  return col ? col.prefixes : [];
-});
 
 // 💡 [추가된 함수] 컬렉션 변경 시 Prefix 선택 상태 초기화
 const updatePrefixList = () => {
