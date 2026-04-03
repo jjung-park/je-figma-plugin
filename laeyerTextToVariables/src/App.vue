@@ -184,9 +184,6 @@ onMounted(() => {
 .p-4 { padding: 20px; font-family: 'Inter', sans-serif; color: #333; }
 .title { font-size: 18px; font-weight: 800; margin-bottom: 20px; letter-spacing: -0.5px; }
 .step-section { margin-bottom: 24px; }
-.step-header { display: flex; align-items: center; margin-bottom: 10px; }
-.step-badge { background: #333; color: white; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 10px; font-weight: bold; margin-right: 8px; }
-.step-title { font-size: 13px; font-weight: 600; color: #555; }
 button { width: 100%; border: none; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; padding: 12px; }
 .btn-primary { background: #18A0FB; color: white; }
 .btn-next { background: #1BC47D; color: white; }
@@ -196,10 +193,8 @@ button { width: 100%; border: none; border-radius: 6px; font-weight: 600; font-s
 .input-field { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; box-sizing: border-box; background: #fff; color:#000; }
 .edit-input { width: 100%; padding: 6px; border: 1px solid #18A0FB; border-radius: 4px; font-size: 12px; outline: none; background: #fff; color:#000}
 .table-container { border: 1px solid #eee; border-radius: 6px; overflow: hidden; }
-.table-info { font-size: 10px; color: #999; padding: 8px; background: #fafafa; border-bottom: 1px solid #eee; }
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 th { background: #f9f9f9; padding: 8px; font-size: 11px; text-align: left; color: #777; border-bottom: 1px solid #eee; }
 td { padding: 8px; border-bottom: 1px solid #eee; vertical-align: middle; }
-.cell-korean { font-size: 11px; color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .empty-state { text-align: center; color: #aaa; font-size: 12px; margin-top: 40px; border: 1px dashed #ccc; padding: 20px; border-radius: 10px; }
 </style>
