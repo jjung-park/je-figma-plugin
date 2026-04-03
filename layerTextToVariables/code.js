@@ -21,23 +21,13 @@ figma.ui.onmessage = async (msg) => {
         return;
     }
 
-    // 2. 텍스트 추출 로직
+    // 2. 텍스트 추출
     if (msg.type === 'extract-text') {
         const selection = figma.currentPage.selection;
         if (selection.length === 0) { figma.notify("❌ 프레임을 선택해주세요."); return; }
         const resultMap = new Map();
         selection.forEach(root => {
-            const findNodes = (name) => {
-                try {
-                    if (!root || root.removed) return [];
-                    return root.findAll(n => {
-                        try {
-                            // 노드가 유효하고 name 속성에 접근 가능한지 확인
-                            return !n.removed && n.name && n.name.toLowerCase().includes(name);
-                        } catch (e) { return false; }
-                    });
-                } catch (e) { return []; }
-            };
+            const findNodes = (name) => root.findAll ? root.findAll(n => n.name.toLowerCase().includes(name)) : [];
             const headers = findNodes("cell-header");
             const bodies = findNodes("cell-body");
 
@@ -62,13 +52,11 @@ figma.ui.onmessage = async (msg) => {
         return;
     }
 
-    // 3. 변수 등록 및 레이어 바인딩 (복구 및 통합 버전)
+    // 3. 변수 등록 및 레이어 연결 (복구된 메인 로직)
     if (msg.type === 'register-variables') {
         const { data, collectionId, newCollectionName, prefix } = msg;
-        figma.notify("🔄 변수 등록 및 레이어 바인딩 시작...");
 
         try {
-            // 1. 콜렉션 준비
             const collections = await figma.variables.getLocalVariableCollectionsAsync();
             let col = (collectionId && collectionId !== 'new')
                 ? collections.find(c => c.id === collectionId)
@@ -76,7 +64,7 @@ figma.ui.onmessage = async (msg) => {
 
             if (!col) col = figma.variables.createVariableCollection((newCollectionName || "Translations").trim());
 
-            // 2. 모드 설정 (title / contents)
+            // 모드 설정
             if (col.modes.length < 2) {
                 if (col.modes[0].name !== "title") await col.renameMode(col.modes[0].modeId, "title");
                 await col.addMode("contents");
@@ -84,7 +72,6 @@ figma.ui.onmessage = async (msg) => {
             const modeTitleId = col.modes[0].modeId;
             const modeContentsId = col.modes[1].modeId;
 
-            // 3. 변수 및 레이어 데이터 준비
             const allVars = await figma.variables.getLocalVariablesAsync("STRING");
             const colVars = allVars.filter(v => v.variableCollectionId === col.id);
             const currentSelection = figma.currentPage.selection;
@@ -95,7 +82,6 @@ figma.ui.onmessage = async (msg) => {
                 const userPath = prefix ? `${prefix}/${varName}` : varName;
                 const commonPath = `common/${varName}`;
 
-                // 중복 체크 및 변수 결정
                 const existingVarsWithName = colVars.filter(v => v.name.split('/').pop() === varName);
                 let targetVar;
 
@@ -106,65 +92,37 @@ figma.ui.onmessage = async (msg) => {
                     targetVar = figma.variables.createVariable(userPath, col, "STRING");
                 }
 
-                // 모드별 값 주입
                 targetVar.setValueForMode(modeTitleId, String(item.header || "").trim());
                 targetVar.setValueForMode(modeContentsId, String(item.body || "").trim());
 
-                // 🚀 [핵심] 레이어 바인딩 및 모드 적용
+                // 레이어 바인딩 루프
                 for (const root of currentSelection) {
                     if (root.removed) continue;
-
-                    let targets = [];
-                    try {
-                        // 💡 여기서도 동일하게 방어적 검색 수행
-                        targets = root.findAll(n => {
-                            try {
-                                return !n.removed && n.name && (n.name.toLowerCase().includes("cell-header") || n.name.toLowerCase().includes("cell-body"));
-                            } catch (e) { return false; }
-                        });
-                    } catch (e) {
-                        console.warn("findAll 실행 중 노드 유실됨:", e.message);
-                        continue;
-                    }
+                    const targets = root.findAll ? root.findAll(n => n.name.toLowerCase().includes("cell-header") || n.name.toLowerCase().includes("cell-body")) : [];
 
                     for (const node of targets) {
-                        try {
-                            // 텍스트 노드 찾기 (자신이 텍스트거나 자식 중 첫 번째 텍스트)
-                            const tNode = (node.type === "TEXT") ? node : (node.findAll ? node.findAll(n => n.type === "TEXT")[0] : null);
-                            if (!tNode || tNode.removed) continue;
+                        const tNode = (node.type === "TEXT") ? node : (node.findAll ? node.findAll(n => n.type === "TEXT")[0] : null);
+                        if (!tNode) continue;
 
-                            const isHeader = node.name.toLowerCase().includes("cell-header");
-                            const nodeText = tNode.characters.trim();
-                            const targetValue = isHeader ? String(item.header).trim() : String(item.body).trim();
+                        const isHeader = node.name.toLowerCase().includes("cell-header");
+                        const nodeText = tNode.characters.trim();
+                        const targetValue = isHeader ? String(item.header).trim() : String(item.body).trim();
 
-                            // 💡 텍스트 내용이 일치하는 경우에만 실행
-                            if (nodeText === targetValue) {
-                                const targetModeId = isHeader ? modeTitleId : modeContentsId;
+                        if (nodeText === targetValue) {
+                            const targetModeId = isHeader ? modeTitleId : modeContentsId;
 
-                                // A. 레이어(또는 부모)에 콜렉션 모드 설정
-                                if (node.setExplicitVariableModeForCollection) {
-                                    node.setExplicitVariableModeForCollection(col, targetModeId);
-                                }
-
-                                // B. 텍스트 노드 자체에도 모드 설정 (인스턴스 대응)
-                                if (tNode.id !== node.id && tNode.setExplicitVariableModeForCollection) {
-                                    tNode.setExplicitVariableModeForCollection(col, targetModeId);
-                                }
-
-                                // C. 변수 바인딩 (characters 속성에 targetVar 연결)
-                                tNode.setBoundVariable('characters', targetVar);
-
-                                boundCount++;
+                            // 모드 설정 및 변수 연결
+                            if (node.setExplicitVariableModeForCollection) {
+                                node.setExplicitVariableModeForCollection(col, targetModeId);
                             }
-                        } catch (e) {
-                            console.warn("개별 노드 바인딩 실패:", e.message);
+                            tNode.setBoundVariable('characters', targetVar);
+                            boundCount++;
                         }
                     }
                 }
             }
-            figma.notify(`✅ 총 ${boundCount}개 레이어에 변수 및 모드 적용 완료!`);
+            figma.notify(`✅ ${boundCount}개 레이어 연결 완료!`);
         } catch (error) {
-            console.error(error);
             figma.notify("❌ 오류: " + error.message);
         }
     }
