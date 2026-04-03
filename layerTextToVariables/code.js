@@ -27,7 +27,17 @@ figma.ui.onmessage = async (msg) => {
         if (selection.length === 0) { figma.notify("❌ 프레임을 선택해주세요."); return; }
         const resultMap = new Map();
         selection.forEach(root => {
-            const findNodes = (name) => root.findAll ? root.findAll(n => n.name.toLowerCase().includes(name)) : [];
+            const findNodes = (name) => {
+                try {
+                    if (!root || root.removed) return [];
+                    return root.findAll(n => {
+                        try {
+                            // 노드가 유효하고 name 속성에 접근 가능한지 확인
+                            return !n.removed && n.name && n.name.toLowerCase().includes(name);
+                        } catch (e) { return false; }
+                    });
+                } catch (e) { return []; }
+            };
             const headers = findNodes("cell-header");
             const bodies = findNodes("cell-body");
 
@@ -104,10 +114,18 @@ figma.ui.onmessage = async (msg) => {
                 for (const root of currentSelection) {
                     if (root.removed) continue;
 
-                    // 'cell-header' 또는 'cell-body'가 포함된 노드 검색
-                    const targets = root.findAll ? root.findAll(n =>
-                        !n.removed && (n.name.toLowerCase().includes("cell-header") || n.name.toLowerCase().includes("cell-body"))
-                    ) : [];
+                    let targets = [];
+                    try {
+                        // 💡 여기서도 동일하게 방어적 검색 수행
+                        targets = root.findAll(n => {
+                            try {
+                                return !n.removed && n.name && (n.name.toLowerCase().includes("cell-header") || n.name.toLowerCase().includes("cell-body"));
+                            } catch (e) { return false; }
+                        });
+                    } catch (e) {
+                        console.warn("findAll 실행 중 노드 유실됨:", e.message);
+                        continue;
+                    }
 
                     for (const node of targets) {
                         try {
