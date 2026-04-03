@@ -38,7 +38,7 @@
           </tr>
           </thead>
           <tbody>
-          <tr v-for="(pair, idx) in extractedPairs" :key="idx">
+          <tr v-for="(pair, idx) in extractedPairs" :key="idx" >
             <td class="cell-text" :title="pair.header">{{ pair.header }}</td>
             <td class="cell-text" :title="pair.body">{{ pair.body }}</td>
             <td><input v-model="translatedTexts[pair.header]" class="edit-input" placeholder="Key 명칭" /></td>
